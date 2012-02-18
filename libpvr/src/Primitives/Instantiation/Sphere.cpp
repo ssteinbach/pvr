@@ -57,8 +57,12 @@ namespace Inst {
 
 ModelerInput::Ptr Sphere::execute(const Geo::Geometry::CPtr geo) const
 {
+  typedef AttrVisitor::const_iterator AttrIter;
+
   assert(geo != NULL);
   assert(geo->particles() != NULL);
+
+  // Sanity check ---
 
   if (!geo->particles()) {
     Log::warning("Instantiation primitive has no particles. "
@@ -68,64 +72,75 @@ ModelerInput::Ptr Sphere::execute(const Geo::Geometry::CPtr geo) const
 
   // Handle batches ---
 
-  if (geo == m_batch.geo) {
+  if (m_batch.done) {
     return ModelerInput::Ptr();
   }
 
   // Set up output geometry ---
 
-  size_t numPoints = numOutputPoints(geo);
-
-  Geometry::Ptr outGeo = Geometry::create();
-  Particles::Ptr particles = Particles::create();
-  ModelerInput::Ptr result = ModelerInput::create();
+  size_t                 numPoints = numOutputPoints(geo);
+  Geometry::Ptr          outGeo    = Geometry::create();
+  Particles::Ptr         particles = Particles::create();
+  ModelerInput::Ptr      result    = ModelerInput::create();
   Prim::Rast::Point::Ptr pointPrim = Prim::Rast::Point::create();
   
-  particles->add(numPoints);
   outGeo->setParticles(particles);
   result->setGeometry(outGeo);
   result->setVolumePrimitive(pointPrim);
 
+  // Cache attributes ---
+
   AttrTable &points = particles->pointAttrs();
-  AttrRef wsV = points.addVectorAttr("v", Vector(0.0));
-  AttrRef radius = points.addFloatAttr("radius", 1, vector<float>(1, 1.0));
-  AttrRef density = points.addVectorAttr("density", Vector(1.0));
+  AttrRef wsV       = points.addVectorAttr("v", Vector(0.0));
+  AttrRef radius    = points.addFloatAttr("radius", 1, vector<float>(1, 1.0));
+  AttrRef density   = points.addVectorAttr("density", Vector(1.0));
+
+  // Set up batch information ---
+
+  size_t idx    = 0;
+  size_t srcIdx = m_batch.lastSourcePointIdx;
+
+  if (m_batch.first) {
+    Log::print("Sphere processing " + str(geo->particles()->size()) +
+               " input points");
+  } else {
+    Log::print("Sphere continuing with batch " + str(m_batch.id));
+  }
 
   // Loop over input points ---
 
-  size_t idx = 0;
   ProgressReporter progress(2.5f, "  ");
   AttrVisitor visitor(geo->particles()->pointAttrs(), m_params);
 
-  Log::print("Sphere processing " + str(geo->particles()->size()) +
-             " input points");
-  Log::print("  Output: " + str(numPoints) + " points");
-
-  for (AttrVisitor::const_iterator i = visitor.begin(), end = visitor.end(); 
-       i != end; ++i) {
+  for (AttrIter i = visitor.begin(srcIdx), end = visitor.end(); 
+       i != end; ++i, ++srcIdx) {
     // Check if user terminated
     Sys::Interrupt::throwOnAbort();
     // Update attributes
     m_attrs.update(i);
-    // Seed random number generator
-    Imath::Rand48 rng(m_attrs.seed);
     // Noise offset by seed
     Vector nsOffset;
-    nsOffset.x = rng.nextf(-100, 100);
-    nsOffset.y = rng.nextf(-100, 100);
-    nsOffset.z = rng.nextf(-100, 100);
+    nsOffset.x = m_attrs.rng.nextf(-100, 100);
+    nsOffset.y = m_attrs.rng.nextf(-100, 100);
+    nsOffset.z = m_attrs.rng.nextf(-100, 100);
     // For each instance
-    for (int i = 0; i < m_attrs.numPoints; ++i, ++idx) {
+    size_t batchSize = 
+      std::min(m_attrs.batchSize.value(),
+               m_attrs.numPoints.value() - 
+               static_cast<int>(m_batch.lastInstanceIdx)) -
+      static_cast<int>(particles->size());
+    particles->add(batchSize);
+    for (size_t i = 0; i < batchSize; ++i, ++idx) {
       // Check if user terminated
       Sys::Interrupt::throwOnAbort();
       // Print progress
-      progress.update(static_cast<float>(idx) / numPoints);
+      progress.update(static_cast<float>(idx) / particles->size());
       // Randomize local space position
       Vector lsP(0.0);
       if (m_attrs.doFill) {
-        lsP = solidSphereRand<V3f>(rng);
+        lsP = solidSphereRand<V3f>(m_attrs.rng);
       } else {
-        lsP = hollowSphereRand<V3f>(rng);
+        lsP = hollowSphereRand<V3f>(m_attrs.rng);
       }
       // Define noise space
       V3f nsP = lsP;
@@ -152,10 +167,25 @@ ModelerInput::Ptr Sphere::execute(const Geo::Geometry::CPtr geo) const
       points.setVectorAttr(density, idx, instanceDensity);
       points.setFloatAttr(radius, idx, 0, m_attrs.instanceRadius);
     }
+    // See if we finished a primitive
+    if (m_batch.lastInstanceIdx + batchSize == 
+        static_cast<size_t>(m_attrs.numPoints)) {
+      m_batch.lastInstanceIdx = 0;
+    } else {
+      m_batch.lastInstanceIdx += batchSize;
+      break;
+    }
   }
 
+  Log::print("  Output: " + str(particles->size()) + " points");
+
   // Update state
-  m_batch.geo = geo;
+  m_batch.id++;
+  m_batch.first = false;
+  m_batch.lastSourcePointIdx = srcIdx;
+  if (srcIdx == geo->particles()->size()) {
+    m_batch.done = true;
+  }
 
   return result;
 }
@@ -242,6 +272,7 @@ void Sphere::AttrState::update
   i.update(dispAmplitude);
   i.update(doDensNoise);
   i.update(doDispNoise);
+  i.update(batchSize);
   // Set up fractals
   NoiseFunction::CPtr densNoise = NoiseFunction::CPtr(new PerlinNoise);
   densFractal = Fractal::CPtr(new fBm(densNoise, densScale, densOctaves, 
@@ -249,6 +280,8 @@ void Sphere::AttrState::update
   NoiseFunction::CPtr dispNoise = NoiseFunction::CPtr(new PerlinNoise);
   dispFractal = Fractal::CPtr(new fBm(dispNoise, dispScale, dispOctaves, 
                                       dispOctaveGain, dispLacunarity));
+  // Seed random number generator
+  rng.init(seed.value());
 }
 
 //----------------------------------------------------------------------------//

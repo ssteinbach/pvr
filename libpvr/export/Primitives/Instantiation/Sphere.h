@@ -100,7 +100,8 @@ protected:
         dispLacunarity("displacement_noise_lacunarity",  1.92f), 
         dispAmplitude ("displacement_noise_amplitude",   1.0f), 
         doDensNoise   ("density_noise",                  0), 
-        doDispNoise   ("displacement_noise",             0)
+        doDispNoise   ("displacement_noise",             0),
+        batchSize     ("batch_size",                     100000)
     { }
 
     // Main methods ---
@@ -129,15 +130,27 @@ protected:
     Geo::Attr<float>      dispAmplitude;
     Geo::Attr<int>        doDensNoise;    
     Geo::Attr<int>        doDispNoise;
+    Geo::Attr<int>        batchSize;
     Noise::Fractal::CPtr  densFractal;
     Noise::Fractal::CPtr  dispFractal;
+    Imath::Rand48         rng;
   };
 
   //! Contains information about the current batch state. 
   struct BatchState
   {
-    Geo::Geometry::CPtr geo;
-    size_t lastPointIdx;
+    BatchState()
+      : first(true),
+        done(false),
+        id(0), 
+        lastSourcePointIdx(0),
+        lastInstanceIdx(0)
+    { }
+    bool   first;
+    bool   done;
+    size_t id;
+    size_t lastSourcePointIdx;
+    size_t lastInstanceIdx;
   };
 
   // Utility functions ---------------------------------------------------------

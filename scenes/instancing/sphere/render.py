@@ -44,7 +44,8 @@ primParams = {
     "displacement_noise_lacunarity"  : 1.92,
     "displacement_noise_amplitude"   : 0.1,
     "density_noise"                  : 1,    # Turns on density noise
-    "displacement_noise"             : 1     # Turns on displacement noise
+    "displacement_noise"             : 1,    # Turns on displacement noise
+    "batch_size"                     : 1000000
 }
 
 raymarcherParams = {
