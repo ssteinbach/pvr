@@ -29,6 +29,8 @@
 
 // System includes
 
+#include "Common.h"
+
 #include <map>
 
 // Library includes
@@ -36,8 +38,6 @@
 #include <pvr/RaymarchSamplers/RaymarchSampler.h>
 #include <pvr/RaymarchSamplers/DensitySampler.h>
 #include <pvr/RaymarchSamplers/PhysicalSampler.h>
-
-#include "Common.h"
 
 //----------------------------------------------------------------------------//
 // Helper functions

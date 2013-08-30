@@ -28,6 +28,7 @@
 //----------------------------------------------------------------------------//
 
 // System includes
+#include "Common.h"
 
 #include <boost/python.hpp>
 #include <boost/python/reference_existing_object.hpp>
@@ -39,8 +40,6 @@
 // Library includes
 
 #include <pvr/Camera.h>
-
-#include "Common.h"
 
 //----------------------------------------------------------------------------//
 // Namespaces
