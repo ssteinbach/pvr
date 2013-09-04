@@ -27,8 +27,9 @@
 // Includes
 //----------------------------------------------------------------------------//
 
-// System includes
 #include "Common.h"
+
+// System includes
 
 #include <boost/python.hpp>
 #include <boost/python/reference_existing_object.hpp>

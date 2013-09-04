@@ -27,9 +27,9 @@
 // Includes
 //----------------------------------------------------------------------------//
 
-// System includes
-
 #include "Common.h"
+
+// System includes
 
 // Library includes
 
